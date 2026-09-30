@@ -1048,6 +1048,12 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         self.checkArgs.setChecked(self._cfg.getBool(self._cfg.DEFAULT_POPUP_ADVANCED_ARGS))
         self.checkPID.setChecked(self._cfg.getBool(self._cfg.DEFAULT_POPUP_ADVANCED_PID))
 
+        # setChecked() does not emit toggled if the state does not change.
+        # Thus, set the label and combo visibility from the check state here.
+        self._on_ip_check_toggled(self.checkDstIP.isChecked())
+        if has_host:
+            self._on_host_check_toggled(self.checkDstHost.isChecked())
+
         self._set_cmd_action_text()
         self.checkAdvanced.setFocus()
 
