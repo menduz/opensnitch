@@ -1,4 +1,5 @@
 import threading
+import weakref
 import sys
 import time
 import os
@@ -37,6 +38,11 @@ from opensnitch.utils.network_aliases import NetworkAliases
 DIALOG_UI_PATH = "%s/../../res/prompt.ui" % os.path.dirname(sys.modules[__name__].__file__)
 class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
     _prompt_trigger = QtCore.pyqtSignal()
+    # All pop-ups: there is one pop-up for each node, and more than one can
+    # be visible at the same time.
+    _dialogs = weakref.WeakSet()
+    # The distance between two visible pop-ups.
+    CASCADE_OFFSET = 32
     _tick_trigger = QtCore.pyqtSignal()
     _timeout_trigger = QtCore.pyqtSignal()
 
@@ -52,6 +58,7 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
 
         self.setupUi(self)
         self.setWindowIcon(appicon)
+        PromptDialog._dialogs.add(self)
         self.installEventFilter(self)
 
         self._width = None
@@ -72,6 +79,8 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         self._rule = None
         self._local = True
         self._peer = None
+        self._hostname = ""
+        self._node_label = ""
         self._prompt_trigger.connect(self.on_connection_prompt_triggered)
         self._timeout_trigger.connect(self.on_timeout_triggered)
         self._tick_trigger.connect(self.on_tick_triggered)
@@ -638,6 +647,16 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         self.activateWindow()
         self.adjust_size()
         self.move_popup()
+        self._cascade()
+
+    def _cascade(self):
+        """Move the pop-up below and to the right of the other visible
+        pop-ups, so that each pop-up shows its node."""
+        others = [d for d in PromptDialog._dialogs if d is not self and d.isVisible()]
+        if len(others) == 0:
+            return
+        offset = PromptDialog.CASCADE_OFFSET * len(others)
+        self.move(self.pos() + QtCore.QPoint(offset, offset))
 
     def adjust_size(self):
         if self._width is None or self._height is None:
@@ -756,6 +775,11 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
             self._peer = proto
             if addr is not None:
                 self._peer = proto+":"+addr
+            # The node is always in the message when it has a name (a daemon
+            # in a sandbox) or when more than one node is connected.
+            self._node_label = ""
+            if is_local and (addr != "/local" or self._nodes.count() > 1):
+                self._node_label = self._nodes.get_node_label(self._peer)
 
             self._done.clear()
             # trigger and show dialog
@@ -792,6 +816,11 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
 
     @QtCore.pyqtSlot()
     def on_connection_prompt_triggered(self):
+        title = "OpenSnitch v%s" % version
+        node = self._node_label or self._nodes.get_node_label(self._peer)
+        if node != "":
+            title = "%s - %s" % (node, title)
+        self.setWindowTitle(title)
         self.stackedWidget.setCurrentIndex(constants.PAGE_MAIN)
         self.reset_widgets()
         self._render_connection(self._con)
@@ -927,7 +956,7 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         pixmap = Icons.get_by_appname(app_icon)
         self.set_icon_pixmap(pixmap)
 
-        message = utils.get_popup_message(self._local, self._peer, self._hostname, app_name, con)
+        message = utils.get_popup_message(self._local, self._peer, self._hostname, app_name, con, self._node_label)
 
         self.set_message_text(message)
 

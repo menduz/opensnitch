@@ -680,6 +680,10 @@ class StatsDialog(menus.MenusManager, menu_actions.MenuActions, views.ViewsManag
     def _cb_nodes_updated(self, count):
         node_list = self.node_list()
         self.netstat.update_node_list(count, node_list)
+        # Nodes come and go (for example, one node for each sandbox): the
+        # node menu and the nodes of the rules tree must follow them.
+        self._update_sidebar_nodes()
+        self._add_rulesTree_nodes()
 
     @QtCore.pyqtSlot(str)
     def _cb_fw_table_rows_reordered(self, node_addr):
@@ -1724,6 +1728,7 @@ class StatsDialog(menus.MenusManager, menu_actions.MenuActions, views.ViewsManag
 
     def _add_rulesTree_nodes(self):
         if self.nodes_count() == 0:
+            self.add_tree_items(constants.RULES_TREE_NODES, ())
             return
 
         nodes = self.node_list()

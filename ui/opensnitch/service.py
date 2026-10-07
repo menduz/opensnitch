@@ -53,6 +53,11 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
     _notification_callback = QtCore.pyqtSignal(str, ui_pb2.NotificationReply)
     _show_message_trigger = QtCore.pyqtSignal(str, str, QtWidgets.QSystemTrayIcon.MessageIcon, int)
     _temp_rule_expired = QtCore.pyqtSignal(str, str)
+    _prompt_dialog_trigger = QtCore.pyqtSignal(str, object)
+
+    # The gRPC metadata key with the name of a node (Server.Name of the
+    # daemon). Refer to daemon/ui/nodename.go.
+    NODE_NAME_KEY = "opensnitch-node"
 
     # .desktop filename located under /usr/share/applications/
     DESKTOP_FILENAME = "opensnitch_ui"
@@ -122,7 +127,9 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
         self._desktop_notifications = DesktopNotifications()
         self._setup_interfaces()
         self._setup_icons()
-        self._prompt_dialog = PromptDialog(appicon=self.white_icon)
+        # One pop-up for each node: the nodes ask at the same time, and each
+        # pop-up shows the questions of one node, one at a time.
+        self._prompt_dialogs = {}
         self._stats_dialog = StatsDialog(dbname="general", db=self._db, appicon=self.white_icon)
         self._setup_tray()
         self._setup_slots()
@@ -203,6 +210,12 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
         self._stats_dialog.close_trigger.connect(self._on_close)
         self._show_message_trigger.connect(self._show_systray_message)
         self._temp_rule_expired.connect(self._on_temp_rule_expired)
+        # AskRule() runs on a gRPC thread, and it waits until the main thread
+        # has the pop-up of the node.
+        self._prompt_dialog_trigger.connect(
+            self._on_prompt_dialog_requested,
+            QtCore.Qt.ConnectionType.BlockingQueuedConnection
+        )
 
     def _setup_icons(self):
         self.off_image = QtGui.QPixmap(os.path.join(self._path, "res/icon-off.png"))
@@ -339,7 +352,8 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
     def _on_close(self):
         self._exit = True
         self._tray.setIcon(self.off_icon)
-        self._prompt_dialog.close()
+        for dialog in self._prompt_dialogs.values():
+            dialog.close()
         self._app.processEvents()
         self._nodes.stop_notifications()
         self._nodes.update_all(Nodes.OFFLINE)
@@ -578,11 +592,9 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
             self._connected = True
             self._stats_dialog.daemon_connected = True
 
-        if self._nodes.count() == 1:
-            self._menu_enable_fw.setEnabled(True)
-
-        if self._nodes.count() == 0 or self._nodes.count() > 1:
-            self._menu_enable_fw.setEnabled(False)
+        # With more than one node, the menu entry enables or disables the
+        # interception on all nodes.
+        self._menu_enable_fw.setEnabled(self._nodes.count() > 0)
 
         self._stats_dialog.update_status()
 
@@ -608,10 +620,6 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
             else:
                 print("[service] enable_interception: no nodes connected")
             return
-        if self._nodes.count() > 1:
-            print("enable interception for all nodes not supported yet")
-            return
-
         if enable:
             nid, noti = self._nodes.stop_interception(_callback=self._notification_callback)
         else:
@@ -678,6 +686,38 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
                 )
 
         return _title, tmpl
+    def _context_peer(self, context):
+        """The peer of a gRPC call.
+        All daemons that connect to a unix socket have the same peer ("unix:"),
+        and the GUI shows them as one node (unix:/local). A daemon with a name
+        sends the name in the metadata of each call: its peer is then
+        "unix:/<name>", and it is a different node.
+        """
+        peer = context.peer()
+        if not peer.startswith("unix"):
+            return peer
+        for key, value in context.invocation_metadata() or ():
+            if key == self.NODE_NAME_KEY and value != "":
+                proto = peer.split(":")[0]
+                return "{0}:/{1}".format(proto, value.replace(":", "_"))
+        return peer
+
+    @QtCore.pyqtSlot(str, object)
+    def _on_prompt_dialog_requested(self, node_addr, result):
+        """Gives the pop-up of the node node_addr in result. It makes the
+        pop-up if the node has none. Widgets must be made on the main thread.
+        """
+        dialog = self._prompt_dialogs.get(node_addr)
+        if dialog is None:
+            dialog = PromptDialog(appicon=self.white_icon)
+            self._prompt_dialogs[node_addr] = dialog
+        result.append(dialog)
+
+    def _get_prompt_dialog(self, node_addr):
+        result = []
+        self._prompt_dialog_trigger.emit(node_addr, result)
+        return result[0]
+
     def _get_peer(self, peer):
         """
         server          -> client
@@ -907,7 +947,7 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
         self._on_close()
 
     def PostAlert(self, alert, context):
-        proto, addr = self._get_peer(context.peer())
+        proto, addr = self._get_peer(self._context_peer(context))
         self._add_alert_trigger.emit(proto, addr, alert)
         return ui_pb2.MsgResponse(id=0)
 
@@ -917,7 +957,7 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
             if Utils.check_versions(request.stats.daemon_version):
                 self._version_warning_trigger.emit(request.stats.daemon_version, version)
 
-            proto, addr = self._get_peer(context.peer())
+            proto, addr = self._get_peer(self._context_peer(context))
             # do not update db here, do it on the main thread
             self._update_stats_trigger.emit(proto, addr, request)
             #else:
@@ -931,7 +971,7 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
             #            self._remote_stats[addr]['dialog'].update(addr, request.stats)
 
         except Exception as e:
-            self.logger.warning("exception %s - %s", repr(context.peer()), repr(e))
+            self.logger.warning("exception %s - %s", repr(self._context_peer(context)), repr(e))
         return ui_pb2.PingReply(id=request.id)
 
     def _default_action_rule(self, con):
@@ -960,10 +1000,12 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
 
         # TODO: allow connections originated from ourselves: os.getpid() == request.pid)
         self._asking = True
-        peer = context.peer()
+        peer = self._context_peer(context)
         proto, addr = self._get_peer(peer)
-        hostname = self._nodes.get_node_hostname("%s:%s" % (proto, addr))
-        rule, timeout_triggered = self._prompt_dialog.promptUser(request, self._is_local_request(proto, addr), peer)
+        node_addr = "%s:%s" % (proto, addr)
+        hostname = self._nodes.get_node_hostname(node_addr)
+        dialog = self._get_prompt_dialog(node_addr)
+        rule, timeout_triggered = dialog.promptUser(request, self._is_local_request(proto, addr), peer)
         self._last_ping = datetime.now()
         self._asking = False
         if rule is None:
@@ -973,7 +1015,9 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
             return self._default_action_rule(request)
 
         if timeout_triggered:
-            node_text = "" if self._is_local_request(proto, addr) else "on node {0}:{1}".format(proto, addr)
+            node_text = ""
+            if not self._is_local_request(proto, addr) or addr != "/local":
+                node_text = "on node {0}".format(self._nodes.get_node_label(node_addr))
             _title, _msg = self._build_missed_rule_msg(request, rule, node_text, hostname)
             self._show_message_trigger.emit(
                 _title,
@@ -1008,29 +1052,29 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
 
         @doc: https://grpc.github.io/grpc/python/grpc.html#service-side-context
         """
-        self.logger.info("%s", repr(context.peer()))
+        self.logger.info("%s", repr(self._context_peer(context)))
         # if the exit mark is set, don't accept new connections.
         # db vacuum operation may take a lot of time to complete.
         if self._exit:
-            self.logger.info("_exit mark set, exiting, %s", repr(context.peer()))
+            self.logger.info("_exit mark set, exiting, %s", repr(self._context_peer(context)))
             context.cancel()
             return
         try:
             self._node_actions_trigger.emit({
                     'action': self.NODE_ADD,
-                    'peer': context.peer(),
+                    'peer': self._context_peer(context),
                     'node_config': node_config
                  })
             # force events processing, to add the node ^ before the
             # Notifications() call arrives.
             self._app.processEvents()
 
-            proto, addr = self._get_peer(context.peer())
+            proto, addr = self._get_peer(self._context_peer(context))
             if self._is_local_request(proto, addr) == False:
                 hostname = self._nodes.get_node_hostname("%s:%s" % (proto, addr))
-                body = "{0}".format(context.peer())
+                body = "{0}".format(self._context_peer(context))
                 if hostname != "":
-                    body = "{0}\n{1}".format(hostname, context.peer())
+                    body = "{0}\n{1}".format(hostname, self._context_peer(context))
 
                 self._show_message_trigger.emit(
                     QtCore.QCoreApplication.translate("stats", "New node connected"),
@@ -1054,10 +1098,10 @@ class UIService(ui_pb2_grpc.UIServicer, QtWidgets.QGraphicsObject):
         @doc: https://grpc.github.io/grpc/python/grpc.html#service-side-context
         @doc: https://grpc.io/docs/what-is-grpc/core-concepts/
         """
-        local_peer = context.peer()
+        local_peer = self._context_peer(context)
         self.logger.info("channel started: %s", repr(local_peer))
 
-        proto, addr = self._get_peer(context.peer())
+        proto, addr = self._get_peer(self._context_peer(context))
         node_addr = f"{proto}:{addr}"
         cur_node = self._nodes.get_node(node_addr)
         if cur_node is None:

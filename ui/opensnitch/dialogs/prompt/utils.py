@@ -33,16 +33,20 @@ def get_rule_name(rule, is_list):
 
     return rule_temp_name[:128]
 
-def get_popup_message(is_local, node, hostname, app_name, con):
+def get_popup_message(is_local, node, hostname, app_name, con, node_label=""):
     """
     _get_popup_message helps constructing the message that is displayed on
     the pop-up dialog. Example:
         curl is connecting to www.opensnitch.io on TCP port 443
+    With node_label, for a local node:
+        curl on sandbox-web is connecting to www.opensnitch.io on TCP port 443
     """
     app_name = truncate_text(app_name)
 
     message = "<b>{0}</b>".format(app_name)
-    if not is_local:
+    if is_local and node_label != "":
+        message = QC.translate("popups", "{0} on <b>{1}</b>".format(message, node_label))
+    elif not is_local:
         message = QC.translate("popups", "<b>Remote</b> process {0} running on <b>{1} ({2})</b>".format(
             message,
             node.split(':')[1],

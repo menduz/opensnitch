@@ -215,6 +215,23 @@ class Nodes(QObject):
             self.logger.warning("exception get_node_hostname(): %s", repr(e))
             return ""
 
+    def get_node_label(self, addr):
+        """The name of a node for the user.
+        unix:/local is the daemon of this computer: the label is its hostname.
+        unix:/<name> is a daemon with a name (Server.Name), for example the
+        daemon in the network namespace of a sandbox: the label is the name.
+        A remote node has its hostname and its address.
+        """
+        hostname = self.get_node_hostname(addr)
+        proto, _, name = addr.partition(":")
+        if proto.startswith("unix"):
+            if name not in ("", "/local"):
+                return name.lstrip("/")
+            return hostname or "localhost"
+        if hostname != "":
+            return "{0} ({1})".format(hostname, name)
+        return name
+
     def get_node_config(self, addr):
         try:
             if addr not in self._nodes:
