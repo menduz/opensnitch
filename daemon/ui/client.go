@@ -57,6 +57,8 @@ type Client struct {
 
 	socketPath     string
 	unixSockPrefix string
+	// nodeName is Server.Name. The dial options send it to the GUI.
+	nodeName string
 
 	//isAsking is set to true if the client is awaiting a decision from the GUI
 	isAsking     bool
@@ -280,11 +282,18 @@ func (c *Client) openSocket() (err error) {
 	if err != nil {
 		return fmt.Errorf("Invalid client auth options: %s", err)
 	}
+	opts := []grpc.DialOption{dialOption}
+	if name := c.nodeName; name != "" {
+		opts = append(opts,
+			grpc.WithUnaryInterceptor(nodeNameUnaryInterceptor(name)),
+			grpc.WithStreamInterceptor(nodeNameStreamInterceptor(name)))
+	}
 	if c.isUnixSocket {
-		c.con, err = grpc.Dial(c.socketPath, dialOption,
+		opts = append(opts,
 			grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 				return net.DialTimeout(c.unixSockPrefix, addr, timeout)
 			}))
+		c.con, err = grpc.Dial(c.socketPath, opts...)
 	} else {
 		// https://pkg.go.dev/google.golang.org/grpc/keepalive#ClientParameters
 		var kacp = keepalive.ClientParameters{
@@ -296,7 +305,8 @@ func (c *Client) openSocket() (err error) {
 			PermitWithoutStream: true,
 		}
 
-		c.con, err = grpc.Dial(c.socketPath, dialOption, grpc.WithKeepaliveParams(kacp))
+		opts = append(opts, grpc.WithKeepaliveParams(kacp))
+		c.con, err = grpc.Dial(c.socketPath, opts...)
 	}
 
 	return err

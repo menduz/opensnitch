@@ -46,6 +46,11 @@ type (
 		Authentication ServerAuth             `json:"Authentication"`
 		LogFile        string                 `json:"LogFile"`
 		Loggers        []loggers.LoggerConfig `json:"Loggers"`
+		// Name is the name of this node in the GUI. The daemon sends it with
+		// each call to the GUI. Use it when more than one daemon connects to
+		// the same unix socket, for example one daemon for each network
+		// namespace. If it is empty, the GUI uses the address of the peer.
+		Name string `json:"Name,omitempty"`
 	}
 
 	// RulesOptions struct

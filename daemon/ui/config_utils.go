@@ -145,6 +145,16 @@ func (c *Client) reloadConfiguration(reload bool, newConfig *config.Config) (err
 		!reflect.DeepEqual(newConfig.Server.Authentication.TLSOptions, c.config.Server.Authentication.TLSOptions)
 	connect := false
 
+	// Set the node name before the connection: the poller can connect
+	// before c.config gets the new configuration. The dial options send the
+	// name, so connect again if it changes.
+	c.Lock()
+	if c.nodeName != newConfig.Server.Name {
+		c.nodeName = newConfig.Server.Name
+		reconnect = reload
+	}
+	c.Unlock()
+
 	if newConfig.Server.Address == "" {
 		log.Debug("[config] config.server.address changed, disconnecting from %s", c.socketPath)
 		c.setSocketPath("")

@@ -35,6 +35,9 @@ func NewReply(rID uint64, replyCode protocol.NotificationReplyCode, data string)
 func (c *Client) getClientConfig() *protocol.ClientConfig {
 	raw, _ := ioutil.ReadFile(configFile)
 	nodeName := core.GetHostname()
+	if c.config.Server.Name != "" {
+		nodeName = c.config.Server.Name
+	}
 	nodeVersion := core.GetKernelVersion()
 	var ts time.Time
 	// GetAll() returns a snapshot, so len() and the range below see a
