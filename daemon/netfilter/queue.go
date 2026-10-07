@@ -83,7 +83,10 @@ func NewQueue(queueID uint16) (q *Queue, err error) {
 func (q *Queue) create(queueID uint16) (err error) {
 	var ret C.int
 
-	if q.h, err = C.nfq_open(); err != nil {
+	// cgo gives errno as err. A call that succeeds can leave errno set: in a
+	// network namespace of a user namespace, nfq_open() succeeds with errno
+	// ENOENT. Thus the handle, not err, tells if nfq_open() failed.
+	if q.h, err = C.nfq_open(); q.h == nil {
 		return fmt.Errorf("Error opening Queue handle: %v", err)
 	} else if ret, err = C.nfq_unbind_pf(q.h, AF_INET); err != nil || ret < 0 {
 		errmsg := fmt.Errorf("Error %d unbinding existing q handler from AF_INET protocol family: %v", ret, err)
