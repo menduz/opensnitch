@@ -115,8 +115,10 @@ func (p *Process) GetDetails() error {
 	p.ReadComm()
 	p.ReadCwd()
 
-	// we need to load the env variables now, in order to be used with the rules.
+	// we need to load the env variables and the sandbox now, in order to be
+	// used with the rules.
 	p.ReadEnv()
+	p.ReadSandbox()
 
 	return nil
 }

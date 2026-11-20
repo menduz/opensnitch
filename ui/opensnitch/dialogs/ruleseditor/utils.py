@@ -78,6 +78,9 @@ def reset_state(win):
     win.pidCheck.setChecked(False)
     win.pidLine.setText("")
 
+    win.sandboxCheck.setChecked(False)
+    win.sandboxLine.setText("")
+
     win.ifaceCheck.setChecked(False)
     win.ifaceCombo.setCurrentText("")
 

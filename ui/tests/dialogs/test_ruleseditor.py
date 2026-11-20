@@ -810,3 +810,33 @@ class TestRulesEditor():
 
         assert self.rd.statusLabel.text() == ""
         assert self.rd.rule.description == "This is a test rule description"
+
+    def test_sandbox_field(self, qtbot):
+        """ A rule with process.sandbox: the editor saves the field, and loads
+        it again. Without the field, the editor dropped the condition.
+        """
+        re_constants.WORK_MODE = re_constants.ADD_RULE
+        re_utils.reset_state(self.rd)
+
+        self.rd.sandboxCheck.setChecked(True)
+        self.rd.sandboxLine.setText("")
+        result, error = self.rd.save_rule()
+        assert result is False
+
+        self.rd.sandboxLine.setText("code")
+        self.rd.dstPortCheck.setChecked(True)
+        self.rd.dstPortLine.setText("443")
+        result, error = self.rd.save_rule()
+        assert result is True, error
+        assert self.rd.rule.operator.type == Config.RULE_TYPE_LIST
+        assert any(op.operand == Config.OPERAND_PROCESS_SANDBOX and op.data == "code" and op.type == "simple"
+                   for op in self.rd.rule.operator.list)
+
+        rule = self.rd.rule
+        re_utils.reset_state(self.rd)
+        assert not self.rd.sandboxCheck.isChecked()
+        assert self.rd.sandboxLine.text() == ""
+        for op in rule.operator.list:
+            re_rules.load_operator(self.rd, op)
+        assert self.rd.sandboxCheck.isChecked()
+        assert self.rd.sandboxLine.text() == "code"

@@ -142,6 +142,9 @@ message Connection {
     map<string, string> process_env = 12;
     map<string, string> process_checksums = 13;
     repeated StringInt process_tree = 14;
+    // The sandbox of the process, from its cgroup (sandbox-<name>.slice), or
+    // "" for a process in no sandbox.
+    string process_sandbox = 15;
 }
 
 message Operator {

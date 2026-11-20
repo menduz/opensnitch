@@ -1362,3 +1362,32 @@ func TestNewOperatorRange(t *testing.T) {
 
 	restoreConnection()
 }
+
+func TestNewOperatorProcessSandbox(t *testing.T) {
+	var list []Operator
+	defer func() { proc.Sandbox = "" }()
+
+	op, err := NewOperator(Simple, false, OpProcessSandbox, "code", list)
+	if err != nil {
+		t.Fatal("NewOperator process.sandbox err should be nil:", err)
+	}
+	if err = op.Compile(); err != nil {
+		t.Fatal("NewOperator process.sandbox Compile() err:", err)
+	}
+
+	proc.Sandbox = "code"
+	if !op.Match(conn, false) {
+		t.Error("process.sandbox code does not match a process of the sandbox code")
+	}
+	proc.Sandbox = "web"
+	if op.Match(conn, false) {
+		t.Error("process.sandbox code matches a process of the sandbox web")
+	}
+	// A program on the host has no sandbox, also when its environment says so.
+	proc.Sandbox = ""
+	proc.Env = map[string]string{"SANDBOX_NAME": "code"}
+	if op.Match(conn, false) {
+		t.Error("process.sandbox code matches a process on the host with SANDBOX_NAME=code")
+	}
+	proc.Env = nil
+}

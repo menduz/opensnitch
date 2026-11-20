@@ -18,6 +18,7 @@ def connect_all(win):
     win.srcPortCheck.toggled.connect(win.cb_srcport_check_toggled)
     win.uidCheck.toggled.connect(win.cb_uid_check_toggled)
     win.pidCheck.toggled.connect(win.cb_pid_check_toggled)
+    win.sandboxCheck.toggled.connect(win.cb_sandbox_check_toggled)
     win.srcIPCheck.toggled.connect(win.cb_srcip_check_toggled)
     win.dstIPCheck.toggled.connect(win.cb_dstip_check_toggled)
     win.dstHostCheck.toggled.connect(win.cb_dsthost_check_toggled)

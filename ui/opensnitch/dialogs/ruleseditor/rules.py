@@ -115,6 +115,11 @@ def load_operator(win, operator):
         win.pidLine.setEnabled(True)
         win.pidLine.setText(operator.data)
 
+    if operator.operand == Config.OPERAND_PROCESS_SANDBOX:
+        win.sandboxCheck.setChecked(True)
+        win.sandboxLine.setEnabled(True)
+        win.sandboxLine.setText(operator.data)
+
     if operator.operand == Config.OPERAND_IFACE_OUT:
         win.ifaceCheck.setChecked(True)
         win.ifaceCombo.setEnabled(True)

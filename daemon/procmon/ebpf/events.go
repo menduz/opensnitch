@@ -336,6 +336,7 @@ func getProcDetails(event *execEvent, proc *procmon.Process) {
 	proc.BuildTree()
 	proc.ReadCwd()
 	proc.ReadEnv()
+	proc.ReadSandbox()
 }
 
 func processExitEvent(event *execEvent) {

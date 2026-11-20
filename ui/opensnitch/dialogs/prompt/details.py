@@ -26,6 +26,7 @@ def render(node, detailsWidget, con):
 <b>MD5:</b>{10}{11}<br>
 <b>UID:</b>{12}{13}<br>
 <b>PID:</b>{14}{15}<br>
+<b>Sandbox:</b>{18}{19}<br>
 <br>
 <b>Process tree:</b><br>
 {16}
@@ -42,7 +43,8 @@ space * 7, con.process_checksums[Config.OPERAND_PROCESS_HASH_MD5],
 space * 9, con.user_id,
 space * 9, con.process_id,
 tree,
-"".join('<p>{}={}</p>'.format(key, value) for key, value in con.process_env.items())
+"".join('<p>{}={}</p>'.format(key, value) for key, value in con.process_env.items()),
+space * 5, getattr(con, "process_sandbox", "") or "-",
 )
 
     detailsWidget.document().clear()

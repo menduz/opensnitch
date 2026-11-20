@@ -116,6 +116,7 @@ func newConnectionImpl(nfp *netfilter.Packet, c *Connection, protoType string) (
 				c.Process.ReadCwd()
 			}
 			c.Process.ReadEnv()
+			c.Process.ReadSandbox()
 			c.Process.CleanPath()
 
 			procmon.EventsCache.Add(c.Process)
@@ -335,6 +336,7 @@ func (c *Connection) Serialize() *protocol.Connection {
 		ProcessPath:      c.Process.Path,
 		ProcessArgs:      c.Process.Args,
 		ProcessEnv:       c.Process.Env,
+		ProcessSandbox:   c.Process.Sandbox,
 		ProcessCwd:       c.Process.CWD,
 		ProcessChecksums: c.Process.Checksums,
 		ProcessTree:      c.Process.Tree,

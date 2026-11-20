@@ -1,4 +1,6 @@
 from slugify import slugify
+import html
+import json
 import os
 import re
 import ipaddress
@@ -23,6 +25,29 @@ def set_elide_text(widget, text, max_size=64):
     text = truncate_text(text, max_size)
     widget.setText(text)
 
+# The configuration of the sandboxes of mzde (programs.sandboxes). It has the
+# label color of each sandbox.
+SANDBOXES_CONFIG = os.environ.get("SANDBOX_CONFIG", "/etc/sandboxes/config.json")
+
+def sandbox_color(name):
+    """The label color of the sandbox name, or None."""
+    try:
+        with open(SANDBOXES_CONFIG) as f:
+            color = json.load(f)["environments"][name]["color"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if isinstance(color, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', color):
+        return color
+    return None
+
+def sandbox_badge(name, is_local=True):
+    """The sandbox name in white on the color of the sandbox, as kwm shows it
+    on the windows of the sandbox. A remote node has its own configuration,
+    thus its sandboxes are gray."""
+    color = (sandbox_color(name) if is_local else None) or "#808080"
+    return '<span style="background-color:{0}; color:#ffffff;">&nbsp;{1}&nbsp;</span>'.format(
+        color, html.escape(name))
+
 def get_rule_name(rule, is_list):
     rule_temp_name = slugify("%s %s" % (rule.action, rule.duration))
     if is_list:
@@ -33,17 +58,21 @@ def get_rule_name(rule, is_list):
 
     return rule_temp_name[:128]
 
-def get_popup_message(is_local, node, hostname, app_name, con, node_label=""):
+def get_popup_message(is_local, node, hostname, app_name, con, node_label="", sandbox=""):
     """
     _get_popup_message helps constructing the message that is displayed on
     the pop-up dialog. Example:
         curl is connecting to www.opensnitch.io on TCP port 443
     With node_label, for a local node:
         curl on sandbox-web is connecting to www.opensnitch.io on TCP port 443
+    With sandbox, the sandbox of the process (from its cgroup):
+        curl in the sandbox code is connecting to www.opensnitch.io on TCP port 443
     """
     app_name = truncate_text(app_name)
 
     message = "<b>{0}</b>".format(app_name)
+    if sandbox != "":
+        message = QC.translate("popups", "{0} in the sandbox {1}").format(message, sandbox_badge(sandbox, is_local))
     if is_local and node_label != "":
         message = QC.translate("popups", "{0} on <b>{1}</b>".format(message, node_label))
     elif not is_local:

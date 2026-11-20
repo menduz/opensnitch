@@ -44,6 +44,7 @@ const (
 	OpProcessPath         = Operand("process.path")
 	OpProcessParentPath   = Operand("process.parent.path")
 	OpProcessCmd          = Operand("process.command")
+	OpProcessSandbox      = Operand("process.sandbox")
 	OpProcessEnvPrefix    = Operand("process.env.")
 	OpProcessEnvPrefixLen = 12
 	OpProcessHashMD5      = Operand("process.hash.md5")
@@ -460,6 +461,8 @@ func (o *Operator) Match(con *conman.Connection, hasChecksums bool) bool {
 		return o.cb(con.Process.Path)
 	} else if o.Operand == OpProcessCmd {
 		return o.cb(strings.Join(con.Process.Args, " "))
+	} else if o.Operand == OpProcessSandbox {
+		return o.cb(con.Process.Sandbox)
 	} else if o.Operand == OpDstHost {
 		return o.cb(con.DstHost)
 	} else if o.Operand == OpDstIP {

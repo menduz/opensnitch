@@ -91,9 +91,16 @@ type Process struct {
 	pathMaps    string
 	pathMem     string
 	pathIO      string
+	pathCgroup  string
 
 	// Path is the absolute path to the binary
 	Path string
+
+	// Sandbox is the name of the sandbox of the process (programs.sandboxes
+	// of mzde): the slice sandbox-<name>.slice below sandbox.slice in the
+	// cgroup of the process. Empty for a process in no sandbox. The process
+	// cannot change its cgroup, unlike its environment (SANDBOX_NAME).
+	Sandbox string
 
 	// Root is the root directory of the process.
 	// Usually /, but if the process is in a chroot it'll be /whatever/a/b/c
@@ -151,6 +158,7 @@ func NewProcessEmpty(pid int, comm string) *Process {
 	p.pathMem = core.ConcatStrings(p.pathProc, "/mem")
 	p.pathFd = core.ConcatStrings(p.pathProc, "/fd/")
 	p.pathIO = core.ConcatStrings(p.pathProc, "/io")
+	p.pathCgroup = core.ConcatStrings(p.pathProc, "/cgroup")
 
 	return p
 }

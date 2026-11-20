@@ -203,6 +203,9 @@ class RulesEditorDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
     def cb_pid_check_toggled(self, state):
         self.pidLine.setEnabled(state)
 
+    def cb_sandbox_check_toggled(self, state):
+        self.sandboxLine.setEnabled(state)
+
     def cb_srcip_check_toggled(self, state):
         self.srcIPCombo.setEnabled(state)
 
@@ -817,6 +820,25 @@ class RulesEditorDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
                     self.sensitiveCheck.isChecked()
                 )
             )
+
+        if self.sandboxCheck.isChecked():
+            if self.sandboxLine.text() == "":
+                return False, QC.translate("rules", "sandbox can not be empty")
+
+            self.rule.operator.operand = Config.OPERAND_PROCESS_SANDBOX
+            self.rule.operator.data = self.sandboxLine.text()
+            rule_data.append(
+                rules.new_operator(
+                    Config.RULE_TYPE_SIMPLE,
+                    Config.OPERAND_PROCESS_SANDBOX,
+                    self.sandboxLine.text(),
+                    self.sensitiveCheck.isChecked()
+                )
+            )
+            if utils.is_regex(self, self.sandboxLine.text()):
+                rule_data[len(rule_data)-1]['type'] = Config.RULE_TYPE_REGEXP
+                if utils.is_valid_regex(self, self.sandboxLine.text()) is False:
+                    return False, QC.translate("rules", "sandbox regexp error")
 
         if self.pidCheck.isChecked():
             if self.pidLine.text() == "":

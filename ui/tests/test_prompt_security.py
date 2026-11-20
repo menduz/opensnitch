@@ -56,6 +56,7 @@ def _make_dialog_with_args(process_args, process_path="/usr/bin/real_binary"):
     dialog.checkDstHost = MagicMock(); dialog.checkDstHost.isChecked.return_value = False
     dialog.checkCmdline = MagicMock(); dialog.checkCmdline.isChecked.return_value = False
     dialog.checkPID = MagicMock(); dialog.checkPID.isChecked.return_value = False
+    dialog.checkSandbox = MagicMock(); dialog.checkSandbox.isChecked.return_value = False
     dialog.checkSaveRule = MagicMock(); dialog.checkSaveRule.isChecked.return_value = True
 
     dialog.checkArgs = MagicMock(); dialog.checkArgs.isChecked.return_value = True

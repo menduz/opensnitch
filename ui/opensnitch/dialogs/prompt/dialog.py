@@ -220,6 +220,8 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
             source_parts.append('from user <b>%s</b>' % uid_text)
         if self.checkPID.isChecked():
             source_parts.append('from PID <b>%s</b>' % self._con.process_id)
+        if self.checkSandbox.isChecked() and self._sandbox():
+            source_parts.append('in the sandbox <b>%s</b>' % self._sandbox())
 
         deny_text = self._action_text[Config.ACTION_REJECT_IDX] if self.checkReject.isChecked() else self._action_text[Config.ACTION_DROP_IDX]
         action_pair = 'Allow/%s' % deny_text
@@ -366,6 +368,16 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         self.pidLabel = QtWidgets.QLabel("")
         _row_left_check("PROCESS", self.checkPID, _left(self.pidLabel), _dash(False))
         self.checkPID.toggled.connect(lambda _: self._update_preview())
+
+        # -- SANDBOX: sandbox name | ☐ SANDBOX | -- --
+        # The sandbox of the process, from its cgroup. The row is hidden for a
+        # process in no sandbox.
+        self.checkSandbox = QtWidgets.QCheckBox()
+        self.sandboxLabel = QtWidgets.QLabel("")
+        self.sandboxLabel.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        self._sandboxRowIdx = row
+        _row_left_check("SANDBOX", self.checkSandbox, _left(self.sandboxLabel), _dash(False))
+        self.checkSandbox.toggled.connect(lambda _: self._update_preview())
 
         # -- HASH: checksum-value | ☐ HASH | -- --
         self.checksumLabel.setTextInteractionFlags(
@@ -853,6 +865,7 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         self.destPortLabel.setText("")
         self.protocolLabel.setText("")
         self.uidLabel.setText("")
+        self.sandboxLabel.setText("")
         self.checksumLabel.setText("")
         self.labelChecksumStatus.setText("")
 
@@ -956,7 +969,7 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         pixmap = Icons.get_by_appname(app_icon)
         self.set_icon_pixmap(pixmap)
 
-        message = utils.get_popup_message(self._local, self._peer, self._hostname, app_name, con, self._node_label)
+        message = utils.get_popup_message(self._local, self._peer, self._hostname, app_name, con, self._node_label, self._sandbox())
 
         self.set_message_text(message)
 
@@ -1077,6 +1090,16 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
         self.checkArgs.setChecked(self._cfg.getBool(self._cfg.DEFAULT_POPUP_ADVANCED_ARGS))
         self.checkPID.setChecked(self._cfg.getBool(self._cfg.DEFAULT_POPUP_ADVANCED_PID))
 
+        # A rule for a process of a sandbox is for that sandbox: the same path
+        # on the host or in another sandbox does not match it.
+        sandbox = self._sandbox()
+        self.sandboxLabel.setText(utils.sandbox_badge(sandbox, self._local) if sandbox else "")
+        for col in range(5):
+            item = self._ruleGrid.itemAtPosition(self._sandboxRowIdx, col)
+            if item and item.widget():
+                item.widget().setVisible(sandbox != "")
+        self.checkSandbox.setChecked(sandbox != "")
+
         # setChecked() does not emit toggled if the state does not change.
         # Thus, set the label and combo visibility from the check state here.
         self._on_ip_check_toggled(self.checkDstIP.isChecked())
@@ -1182,8 +1205,17 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
             return Config.OPERAND_DEST_IP, self._con.dst_ip
         return None
 
+    def _sandbox(self):
+        """The sandbox of the process, or "" (also from a daemon without the
+        field)."""
+        if self._con is None:
+            return ""
+        sandbox = getattr(self._con, "process_sandbox", "")
+        return sandbox if isinstance(sandbox, str) else ""
+
     def _is_list_rule(self):
-        return self.checkUserID.isChecked() or \
+        return (self.checkSandbox.isChecked() and self._sandbox() != "") or \
+            self.checkUserID.isChecked() or \
             self.checkDstPort.isChecked() or \
             self.checkDstIP.isChecked() or \
             self.checkDstHost.isChecked() or \
@@ -1301,6 +1333,10 @@ class PromptDialog(QtWidgets.QDialog, uic.loadUiType(DIALOG_UI_PATH)[0]):
 
             if self.checkPID.isChecked():
                 data.append({"type": Config.RULE_TYPE_SIMPLE, "operand": Config.OPERAND_PROCESS_ID, "data": str(self._con.process_id)})
+
+            if self.checkSandbox.isChecked() and self._sandbox():
+                data.append({"type": Config.RULE_TYPE_SIMPLE, "operand": Config.OPERAND_PROCESS_SANDBOX, "data": self._sandbox()})
+                rule_temp_name = slugify("%s %s" % (rule_temp_name, self._sandbox()))
 
             is_list_rule = self._is_list_rule()
 
