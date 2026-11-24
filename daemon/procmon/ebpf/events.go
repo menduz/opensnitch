@@ -280,6 +280,14 @@ func processExecEvent(event *execEvent) {
 	}
 
 	if found && needsUpdate {
+		// The process executes a different program with the same PID (for
+		// example a wrapper executes the program that it wraps). The
+		// cache replaces the old item with proc. The event does not give
+		// the cwd, the environment and the sandbox, thus read them now.
+		// Without this, the rules see no sandbox for the program.
+		proc.ReadCwd()
+		proc.ReadEnv()
+		proc.ReadSandbox()
 		procmon.EventsCache.Update(&item.Proc, proc)
 	}
 
